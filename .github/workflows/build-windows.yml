@@ -1,0 +1,59 @@
+name: Build MNN for Windows AVX2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout MNN repository
+        uses: actions/checkout@v4
+        with:
+          repository: alibaba/MNN
+          ref: master
+          submodules: recursive
+
+      - name: Configure MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DMNN_BUILD_SHARED_LIBS=ON `
+            -DMNN_WIN_RUNTIME_MT=ON `
+            -DMNN_USE_SSE=ON `
+            -DMNN_AVX2=ON `
+            -DMNN_AVX512=OFF `
+            -DMNN_BUILD_LLM=ON `
+            -DMNN_BUILD_DEMO=ON `
+            -DMNN_BUILD_TEST=OFF `
+            -DMNN_BUILD_BENCHMARK=OFF `
+            -DMNN_BUILD_CONVERTER=OFF `
+            -DMNN_OPENCL=OFF `
+            -DMNN_VULKAN=OFF
+
+      - name: Build MNN
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Collect build artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package
+          Get-ChildItem build -Recurse -Include *.dll,*.lib,*.exe |
+            Copy-Item -Destination package -Force
+          Get-ChildItem package
+
+      - name: Upload Windows binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: MNN-Windows-x64-AVX2
+          path: package/
+          if-no-files-found: error
+          retention-days: 14
